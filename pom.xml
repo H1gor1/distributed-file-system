@@ -16,6 +16,7 @@
   <modules>
     <module>fileserver-common</module>
     <module>fileserver-core</module>
+    <module>fileserver-data</module>
     <module>fileserver-gateway</module>
     <module>fileserver-client</module>
   </modules>

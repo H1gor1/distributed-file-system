@@ -6,20 +6,19 @@ import br.ifmg.sd.models.SessionUpdate.UpdateType;
 import br.ifmg.sd.models.User;
 import br.ifmg.sd.rpc.AuthResponse;
 import br.ifmg.sd.rpc.ControlService;
+import br.ifmg.sd.rpc.DataService;
 import br.ifmg.sd.security.JWTUtil;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.jgroups.*;
-import org.jgroups.blocks.MethodCall;
-import org.jgroups.blocks.RequestOptions;
-import org.jgroups.blocks.ResponseMode;
 import org.jgroups.blocks.RpcDispatcher;
-import org.jgroups.util.Rsp;
-import org.jgroups.util.RspList;
 import org.jgroups.util.Util;
 
 public class ControlServer implements Receiver, ControlService {
@@ -31,8 +30,18 @@ public class ControlServer implements Receiver, ControlService {
     private final Map<String, Session> sessionCache = new ConcurrentHashMap<>();
     private final Map<String, User> userDatabase = new ConcurrentHashMap<>();
 
-    public ControlServer(String serverName) {
+    private final String registryHost;
+    private final int registryPort;
+    private DataService dataService;
+
+    public ControlServer(
+        String serverName,
+        String registryHost,
+        int registryPort
+    ) {
         this.serverName = serverName;
+        this.registryHost = registryHost;
+        this.registryPort = registryPort;
     }
 
     public void start() throws Exception {
@@ -48,7 +57,7 @@ public class ControlServer implements Receiver, ControlService {
 
         channel = new JChannel(configStream);
         dispatcher = new RpcDispatcher(channel, this);
-        
+
         channel.setReceiver(this);
         channel.connect("control-cluster");
         channel.getState(null, 10000);
@@ -57,7 +66,7 @@ public class ControlServer implements Receiver, ControlService {
         System.out.println("Endereço: " + channel.getAddress());
         System.out.println("RPC Dispatcher pronto para receber chamadas");
     }
-    
+
     public RpcDispatcher getDispatcher() {
         return dispatcher;
     }
@@ -175,30 +184,36 @@ public class ControlServer implements Receiver, ControlService {
     }
 
     @Override
-    public AuthResponse login(String username, String password) throws Exception {
+    public AuthResponse login(String username, String password)
+        throws Exception {
         System.out.println("Login RPC: " + username);
-        
+
         User user = userDatabase.get(username);
         if (user == null || !user.getPassword().equals(password)) {
             return AuthResponse.error("Invalid credentials");
         }
-        
-        String token = createSession(user.getId(), user.getName(), user.getEmail());
+
+        String token = createSession(
+            user.getId(),
+            user.getName(),
+            user.getEmail()
+        );
         return AuthResponse.success(token);
     }
 
     @Override
-    public AuthResponse register(String username, String email, String password) throws Exception {
+    public AuthResponse register(String username, String email, String password)
+        throws Exception {
         System.out.println("Register RPC: " + username);
-        
+
         if (userDatabase.containsKey(username)) {
             return AuthResponse.error("Username already exists");
         }
-        
+
         String userId = "user_" + System.currentTimeMillis();
         User user = new User(userId, username, email, password);
         userDatabase.put(username, user);
-        
+
         String token = createSession(userId, username, email);
         return AuthResponse.success(token);
     }
@@ -219,6 +234,51 @@ public class ControlServer implements Receiver, ControlService {
     public String getUserIdFromToken(String token) throws Exception {
         Session session = sessionCache.get(token);
         return session != null ? session.getUserId() : null;
+    }
+
+    /**
+     * Obtém referência remota ao DataService via RMI Registry lookup.
+     */
+    public DataService getDataService() throws Exception {
+        if (dataService == null) {
+            Registry registry = LocateRegistry.getRegistry(
+                registryHost,
+                registryPort
+            );
+            dataService = (DataService) registry.lookup("data-service");
+            System.out.println("✓ DataService obtido do RMI Registry");
+        }
+        return dataService;
+    }
+
+    /**
+     * Exemplo de uso: salvar arquivo no cluster de dados.
+     */
+    public boolean saveFileToDataCluster(
+        String token,
+        String fileName,
+        byte[] content
+    ) throws Exception {
+        String userId = getUserIdFromToken(token);
+        if (userId == null) {
+            throw new IllegalArgumentException("Token inválido");
+        }
+
+        DataService ds = getDataService();
+        return ds.saveFile(userId, fileName, content);
+    }
+
+    /**
+     * Exemplo de uso: listar arquivos do usuário.
+     */
+    public List<String> listUserFiles(String token) throws Exception {
+        String userId = getUserIdFromToken(token);
+        if (userId == null) {
+            throw new IllegalArgumentException("Token inválido");
+        }
+
+        DataService ds = getDataService();
+        return ds.listFiles(userId);
     }
 
     /**

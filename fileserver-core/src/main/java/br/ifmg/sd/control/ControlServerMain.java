@@ -6,18 +6,33 @@ public class ControlServerMain {
 
     public static void main(String[] args) {
         String serverName = "ControlServer-1";
+        String registryHost = "localhost";
+        int registryPort = 1099;
+
         if (args.length > 0) {
             serverName = args[0];
         }
+        if (args.length > 1) {
+            registryHost = args[1];
+        }
+        if (args.length > 2) {
+            registryPort = Integer.parseInt(args[2]);
+        }
 
         try {
-            ControlServer server = new ControlServer(serverName);
+            ControlServer server = new ControlServer(
+                serverName,
+                registryHost,
+                registryPort
+            );
             server.start();
 
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("\nDesligando servidor...");
-                server.stop();
-            }));
+            Runtime.getRuntime().addShutdownHook(
+                new Thread(() -> {
+                    System.out.println("\nDesligando servidor...");
+                    server.stop();
+                })
+            );
 
             Scanner scanner = new Scanner(System.in);
             System.out.println("\nServidor rodando. Comandos:");
@@ -39,7 +54,6 @@ public class ControlServerMain {
 
             scanner.close();
             server.stop();
-
         } catch (Exception e) {
             System.err.println("Erro ao iniciar servidor: " + e.getMessage());
             e.printStackTrace();

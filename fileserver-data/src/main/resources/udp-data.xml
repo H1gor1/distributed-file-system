@@ -1,0 +1,49 @@
+<config
+    xmlns="urn:org:jgroups"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="urn:org:jgroups http://www.jgroups.org/schema/jgroups.xsd"
+>
+
+    <!-- Protocolo UDP para comunicação multicast -->
+    <UDP />
+
+    <!-- Descoberta de membros via ping multicast -->
+    <PING />
+
+    <!-- Detecta e resolve partições de rede -->
+    <MERGE3 max_interval="30000" min_interval="10000"/>
+
+    <!-- Detecta falhas via socket -->
+    <FD_SOCK />
+
+    <!-- Verifica suspeitas de falha -->
+    <FD_ALL timeout="60000" interval="15000" />
+
+    <!-- Verifica novamente suspeitas antes de remover -->
+    <VERIFY_SUSPECT timeout="5000" />
+
+    <!-- Garante entrega confiável de mensagens -->
+    <pbcast.NAKACK2 use_mcast_xmit="true" />
+
+    <!-- Comunicação unicast confiável -->
+    <UNICAST3 />
+
+    <!-- Garbage collection de mensagens antigas -->
+    <pbcast.STABLE desired_avg_gossip="50000" max_bytes="4M" />
+
+    <!-- Gerenciamento de grupo (membership) -->
+    <pbcast.GMS print_local_addr="true" join_timeout="3000" />
+
+    <!-- Transferência de estado entre nós -->
+    <pbcast.STATE_TRANSFER />
+
+    <!-- Controle de fluxo unicast -->
+    <UFC max_credits="2M" min_threshold="0.4" />
+
+    <!-- Controle de fluxo multicast -->
+    <MFC max_credits="2M" min_threshold="0.4" />
+
+    <!-- Fragmentação de mensagens grandes -->
+    <FRAG2 frag_size="60K" />
+
+</config>

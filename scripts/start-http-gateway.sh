@@ -7,4 +7,4 @@ cd "$(dirname "$0")/.."
 echo "Iniciando HTTP Gateway na porta $PORT..."
 
 java -cp fileserver-gateway/target/fileserver-gateway-1.0-SNAPSHOT.jar \
-  br.ifmg.sd.gateway.HttpGateway "$PORT"
+  br.ifmg.sd.gateway.core.HttpGateway "$PORT"
