@@ -188,17 +188,27 @@ public class ControlServer implements Receiver, ControlService {
         throws Exception {
         System.out.println("Login RPC: " + username);
 
-        User user = userDatabase.get(username);
-        if (user == null || !user.getPassword().equals(password)) {
-            return AuthResponse.error("Invalid credentials");
-        }
+        try {
+            DataService ds = getDataService();
+            User user = ds.login(username, password);
 
-        String token = createSession(
-            user.getId(),
-            user.getName(),
-            user.getEmail()
-        );
-        return AuthResponse.success(token);
+            if (user == null) {
+                return AuthResponse.error("Invalid credentials");
+            }
+
+            userDatabase.put(username, user);
+
+            String token = createSession(
+                user.getId(),
+                user.getName(),
+                user.getEmail()
+            );
+            return AuthResponse.success(token);
+        } catch (Exception e) {
+            System.err.println("Erro no login: " + e.getMessage());
+            e.printStackTrace();
+            return AuthResponse.error("Erro ao fazer login: " + e.getMessage());
+        }
     }
 
     @Override
@@ -206,16 +216,33 @@ public class ControlServer implements Receiver, ControlService {
         throws Exception {
         System.out.println("Register RPC: " + username);
 
-        if (userDatabase.containsKey(username)) {
-            return AuthResponse.error("Username already exists");
+        try {
+            String userId = java.util.UUID.randomUUID().toString();
+
+            DataService ds = getDataService();
+            boolean registered = ds.registerUser(
+                userId,
+                username,
+                password,
+                email
+            );
+
+            if (!registered) {
+                return AuthResponse.error("Email already exists");
+            }
+
+            User user = new User(userId, email, username, password);
+            userDatabase.put(username, user);
+
+            String token = createSession(userId, username, email);
+            return AuthResponse.success(token);
+        } catch (Exception e) {
+            System.err.println("Erro no registro: " + e.getMessage());
+            e.printStackTrace();
+            return AuthResponse.error(
+                "Erro ao registrar usuario: " + e.getMessage()
+            );
         }
-
-        String userId = "user_" + System.currentTimeMillis();
-        User user = new User(userId, username, email, password);
-        userDatabase.put(username, user);
-
-        String token = createSession(userId, username, email);
-        return AuthResponse.success(token);
     }
 
     @Override
@@ -264,8 +291,12 @@ public class ControlServer implements Receiver, ControlService {
             throw new IllegalArgumentException("Token inválido");
         }
 
-        DataService ds = getDataService();
-        return ds.saveFile(userId, fileName, content);
+        try {
+            DataService ds = getDataService();
+            return ds.saveFile(userId, fileName, content);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao salvar arquivo: " + e.getMessage());
+        }
     }
 
     /**
@@ -279,6 +310,173 @@ public class ControlServer implements Receiver, ControlService {
 
         DataService ds = getDataService();
         return ds.listFiles(userId);
+    }
+
+    // ==================== Implementação das Operações de Arquivos ====================
+
+    @Override
+    public boolean uploadFile(String token, String fileName, byte[] content)
+        throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        String userId = getUserIdFromToken(token);
+        System.out.println(
+            "Upload: " +
+                fileName +
+                " (" +
+                content.length +
+                " bytes) - usuário: " +
+                userId
+        );
+
+        try {
+            DataService ds = getDataService();
+            return ds.saveFile(userId, fileName, content);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao fazer upload: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public byte[] downloadFile(String token, String fileName) throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        String userId = getUserIdFromToken(token);
+        System.out.println("Download: " + fileName + " - usuário: " + userId);
+
+        try {
+            DataService ds = getDataService();
+            return ds.downloadFile(userId, fileName);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao fazer download: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public byte[] downloadFileWithUser(String token, String fileName, String targetUserId) throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        // Se targetUserId não foi fornecido, usa o próprio usuário
+        String userId = (targetUserId != null && !targetUserId.isEmpty()) 
+            ? targetUserId 
+            : getUserIdFromToken(token);
+            
+        System.out.println("Download: " + fileName + " - usuário: " + userId);
+
+        try {
+            DataService ds = getDataService();
+            return ds.downloadFile(userId, fileName);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao fazer download: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean updateFile(String token, String fileName, byte[] newContent)
+        throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        String userId = getUserIdFromToken(token);
+        System.out.println(
+            "Update: " +
+                fileName +
+                " (" +
+                newContent.length +
+                " bytes) - usuário: " +
+                userId
+        );
+
+        try {
+            DataService ds = getDataService();
+            return ds.editFile(userId, fileName, newContent);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao atualizar arquivo: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean updateFileWithUser(String token, String fileName, byte[] newContent, String targetUserId)
+        throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        // Se targetUserId não foi fornecido, usa o próprio usuário
+        String userId = (targetUserId != null && !targetUserId.isEmpty()) 
+            ? targetUserId 
+            : getUserIdFromToken(token);
+            
+        System.out.println(
+            "Update: " + fileName + " (" + newContent.length + " bytes) - usuário: " + userId
+        );
+
+        try {
+            DataService ds = getDataService();
+            return ds.editFile(userId, fileName, newContent);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao atualizar arquivo: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean deleteFile(String token, String fileName) throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        String userId = getUserIdFromToken(token);
+        System.out.println("Delete: " + fileName + " - usuário: " + userId);
+
+        try {
+            DataService ds = getDataService();
+            return ds.deleteFile(userId, fileName);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao deletar arquivo: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<br.ifmg.sd.models.FileMetadata> searchFiles(
+        String token,
+        String fileName
+    ) throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        System.out.println("Busca: " + fileName);
+
+        try {
+            DataService ds = getDataService();
+            return ds.findFilesByName(fileName);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao buscar arquivos: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<String> listMyFiles(String token) throws Exception {
+        if (!validateSession(token)) {
+            throw new SecurityException("Token inválido ou expirado");
+        }
+
+        String userId = getUserIdFromToken(token);
+        System.out.println("Listar arquivos - usuário: " + userId);
+
+        try {
+            DataService ds = getDataService();
+            return ds.listFiles(userId);
+        } catch (java.rmi.RemoteException e) {
+            throw new Exception("Erro ao listar arquivos: " + e.getMessage());
+        }
     }
 
     /**

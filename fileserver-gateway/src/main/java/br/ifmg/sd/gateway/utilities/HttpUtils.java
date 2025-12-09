@@ -50,4 +50,25 @@ public class HttpUtils {
         String json = String.format("{\"error\": \"%s\"}", message);
         sendJsonResponse(exchange, statusCode, json);
     }
+
+    public static Map<String, String> parseQueryParams(String query) {
+        Map<String, String> params = new HashMap<>();
+        if (query == null || query.isEmpty()) {
+            return params;
+        }
+
+        for (String param : query.split("&")) {
+            String[] kv = param.split("=", 2);
+            if (kv.length == 2) {
+                try {
+                    String key = java.net.URLDecoder.decode(kv[0], StandardCharsets.UTF_8);
+                    String value = java.net.URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
+                    params.put(key, value);
+                } catch (Exception e) {
+                    // Ignora parâmetros malformados
+                }
+            }
+        }
+        return params;
+    }
 }

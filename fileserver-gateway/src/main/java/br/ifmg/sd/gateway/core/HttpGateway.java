@@ -63,6 +63,12 @@ public class HttpGateway {
         server.createContext("/api/login", factory.createLoginHandler());
         server.createContext("/api/logout", factory.createLogoutHandler());
         server.createContext("/api/validate", factory.createValidateHandler());
+        server.createContext("/api/files/upload", factory.createUploadFileHandler());
+        server.createContext("/api/files/list", factory.createListFilesHandler());
+        server.createContext("/api/files/search", factory.createSearchFilesHandler());
+        server.createContext("/api/files/download", factory.createDownloadFileHandler());
+        server.createContext("/api/files/update", factory.createUpdateFileHandler());
+        server.createContext("/api/files/delete", factory.createDeleteFileHandler());
         server.createContext("/health", factory.createHealthHandler());
 
         server.setExecutor(null);

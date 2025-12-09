@@ -34,6 +34,9 @@
     <!-- Gerenciamento de grupo (membership) -->
     <pbcast.GMS print_local_addr="true" join_timeout="3000" />
 
+    <!-- Protocolo de locking distribuído -->
+    <CENTRAL_LOCK num_backups="1" />
+
     <!-- Transferência de estado entre nós -->
     <pbcast.STATE_TRANSFER />
 

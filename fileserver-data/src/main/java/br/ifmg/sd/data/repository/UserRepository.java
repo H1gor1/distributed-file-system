@@ -13,27 +13,67 @@ public class UserRepository {
         this.connection = connection;
     }
 
+    public boolean register(String userId, String name, String password, String email)
+        throws SQLException {
+        String sql = """
+                INSERT INTO users (id, name, password, email, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            """;
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, userId);
+            pstmt.setString(2, name);
+            pstmt.setString(3, password);
+            pstmt.setString(4, email);
+            pstmt.setLong(5, System.currentTimeMillis());
+            pstmt.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            if (e.getMessage().contains("UNIQUE constraint failed")) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
+    public User login(String email, String password) throws SQLException {
+        String sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, email);
+            pstmt.setString(2, password);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                return mapResultSetToUser(rs);
+            }
+        }
+        return null;
+    }
+
     public void save(User user) throws SQLException {
         String sql = """
-                INSERT INTO users (name, password, email)
-                VALUES (?, ?, ?)
+                INSERT INTO users (id, name, password, email, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(email)
                 DO UPDATE SET name = excluded.name, password = excluded.password
             """;
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setString(1, user.getName());
-            pstmt.setString(2, user.getPassword());
-            pstmt.setString(3, user.getEmail());
+            pstmt.setString(1, user.getId());
+            pstmt.setString(2, user.getName());
+            pstmt.setString(3, user.getPassword());
+            pstmt.setString(4, user.getEmail());
+            pstmt.setLong(5, System.currentTimeMillis());
             pstmt.executeUpdate();
         }
     }
 
-    public User findById(int id) throws SQLException {
+    public User findById(String id) throws SQLException {
         String sql = "SELECT * FROM users WHERE id = ?";
 
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setInt(1, id);
+            pstmt.setString(1, id);
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
@@ -83,7 +123,7 @@ public class UserRepository {
 
     private User mapResultSetToUser(ResultSet rs) throws SQLException {
         User user = new User();
-        user.setId(String.valueOf(rs.getInt("id")));
+        user.setId(rs.getString("id"));
         user.setName(rs.getString("name"));
         user.setPassword(rs.getString("password"));
         user.setEmail(rs.getString("email"));

@@ -42,7 +42,7 @@
             <configuration>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>br.ifmg.sd.gateway.Gateway</mainClass>
+                  <mainClass>br.ifmg.sd.gateway.core.HttpGateway</mainClass>
                 </transformer>
               </transformers>
             </configuration>
