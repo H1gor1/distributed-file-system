@@ -77,7 +77,11 @@ public class DataServer
                 System.out.println("Estado recebido com sucesso");
             } catch (org.jgroups.StateTransferException e) {
                 System.out.println("Aviso: Não foi possível receber estado (timeout ou sem dados)");
+                System.out.println("Motivo: " + e.getMessage());
                 System.out.println("Servidor iniciará com estado vazio");
+            } catch (Exception e) {
+                System.err.println("Erro ao solicitar estado: " + e.getMessage());
+                e.printStackTrace();
             }
         } else {
             System.out.println("Coordenador não precisa receber estado");
@@ -700,20 +704,42 @@ public class DataServer
 
     @Override
     public void getState(OutputStream output) throws Exception {
-        System.out.println("Solicitacao de estado recebida");
+        System.out.println("====================================");
+        System.out.println("getState() INICIADO - Solicitacao de estado recebida");
+        System.out.println("====================================");
+        
         DataOutputStream dataOutput = new DataOutputStream(output);
 
-        // Enviar usuários primeiro
-        List<br.ifmg.sd.models.User> users = userRepository.findAll();
-        dataOutput.writeInt(users.size());
-        System.out.println("Enviando " + users.size() + " usuários...");
+        // Enviar versão do protocolo para compatibilidade futura
+        dataOutput.writeInt(1); // protocol version
+        
+        // Enviar usuários primeiro - buscar direto do banco com created_at
+        String sql = "SELECT id, name, password, email, created_at FROM users";
+        List<Object[]> userDataList = new ArrayList<>();
+        
+        try (Statement stmt = dbConnection.createStatement()) {
+            ResultSet rs = stmt.executeQuery(sql);
+            while (rs.next()) {
+                userDataList.add(new Object[]{
+                    rs.getString("id"),
+                    rs.getString("name"),
+                    rs.getString("password"),
+                    rs.getString("email"),
+                    rs.getLong("created_at")
+                });
+            }
+        }
+        
+        dataOutput.writeInt(userDataList.size());
+        System.out.println("Enviando " + userDataList.size() + " usuários...");
 
-        for (br.ifmg.sd.models.User user : users) {
-            dataOutput.writeUTF(user.getId());
-            dataOutput.writeUTF(user.getName());
-            dataOutput.writeUTF(user.getPassword());
-            dataOutput.writeUTF(user.getEmail());
-            System.out.println("  Enviando usuário: " + user.getEmail());
+        for (Object[] userData : userDataList) {
+            dataOutput.writeUTF((String) userData[0]); // id
+            dataOutput.writeUTF((String) userData[1]); // name
+            dataOutput.writeUTF((String) userData[2]); // password
+            dataOutput.writeUTF((String) userData[3]); // email
+            dataOutput.writeLong((Long) userData[4]);   // created_at
+            System.out.println("  Enviando usuário: " + userData[3]);
         }
 
         // Enviar arquivos
@@ -760,14 +786,20 @@ public class DataServer
 
         dataOutput.flush();
         System.out.println(
-            "Estado completo enviado: " + users.size() + " usuários, " + fileCount + " arquivos"
+            "Estado completo enviado: " + userDataList.size() + " usuários, " + fileCount + " arquivos"
         );
     }
 
     @Override
     public void setState(InputStream input) throws Exception {
-        System.out.println("Recebendo estado...");
+        System.out.println("====================================");
+        System.out.println("setState() INICIADO - Recebendo estado...");
+        System.out.println("====================================");
         DataInputStream dataInput = new DataInputStream(input);
+
+        // Ler versão do protocolo
+        int protocolVersion = dataInput.readInt();
+        System.out.println("Versão do protocolo: " + protocolVersion);
 
         // Receber usuários primeiro
         int userCount = dataInput.readInt();
@@ -777,13 +809,15 @@ public class DataServer
         int userErrorCount = 0;
 
         for (int i = 0; i < userCount; i++) {
+            String email = "unknown"; // default para logging
             try {
                 String userId = dataInput.readUTF();
                 String name = dataInput.readUTF();
                 String password = dataInput.readUTF();
-                String email = dataInput.readUTF();
+                email = dataInput.readUTF();
+                long createdAt = dataInput.readLong();
 
-                userRepository.save(new br.ifmg.sd.models.User(userId, email, name, password));
+                userRepository.registerWithTimestamp(userId, name, password, email, createdAt);
                 userSuccessCount++;
                 System.out.println(
                     "  [" +
@@ -793,6 +827,28 @@ public class DataServer
                         "] Usuário replicado: " +
                         email
                 );
+            } catch (SQLException e) {
+                // Ignorar duplicatas (usuário já existe)
+                if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint")) {
+                    System.out.println(
+                        "  [" +
+                            (i + 1) +
+                            "/" +
+                            userCount +
+                            "] Usuário já existe (ignorado): " +
+                            email
+                    );
+                } else {
+                    userErrorCount++;
+                    System.err.println(
+                        "  Erro ao receber usuário [" +
+                            (i + 1) +
+                            "/" +
+                            userCount +
+                            "]: " +
+                            e.getMessage()
+                    );
+                }
             } catch (Exception e) {
                 userErrorCount++;
                 System.err.println(
@@ -831,27 +887,43 @@ public class DataServer
 
                 // Salvar no banco e disco com o mesmo diskPath
                 if (content != null) {
-                    fileRepository.saveWithDiskPath(
-                        userId,
-                        userName,
-                        fileName,
-                        content,
-                        diskPath,
-                        createdAt,
-                        updatedAt
-                    );
-                    successCount++;
-                    System.out.println(
-                        "  [" +
-                            (i + 1) +
-                            "/" +
-                            fileCount +
-                            "] Replicado: " +
-                            fileName +
-                            " (" +
-                            contentLength +
-                            " bytes)"
-                    );
+                    try {
+                        fileRepository.saveWithDiskPath(
+                            userId,
+                            userName,
+                            fileName,
+                            content,
+                            diskPath,
+                            createdAt,
+                            updatedAt
+                        );
+                        successCount++;
+                        System.out.println(
+                            "  [" +
+                                (i + 1) +
+                                "/" +
+                                fileCount +
+                                "] Replicado: " +
+                                fileName +
+                                " (" +
+                                contentLength +
+                                " bytes)"
+                        );
+                    } catch (SQLException e) {
+                        // Ignorar duplicatas (arquivo já existe)
+                        if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint")) {
+                            System.out.println(
+                                "  [" +
+                                    (i + 1) +
+                                    "/" +
+                                    fileCount +
+                                    "] Arquivo já existe (ignorado): " +
+                                    fileName
+                            );
+                        } else {
+                            throw e;
+                        }
+                    }
                 } else {
                     System.out.println(
                         "  [" +
