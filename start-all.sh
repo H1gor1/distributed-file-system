@@ -71,9 +71,9 @@ sleep 2
 
 # 2. Iniciar 2 Control Servers (fileserver-core)
 echo "🎮 Iniciando Control Servers..."
-open_terminal "ControlServer-1" "cd '$(pwd)' && java -cp fileserver-core/target/fileserver-core-1.0-SNAPSHOT.jar br.ifmg.sd.control.ControlServerMain ControlServer-1"
+open_terminal "ControlServer-1" "cd '$(pwd)' && java -cp fileserver-core/target/fileserver-core-1.0-SNAPSHOT.jar br.ifmg.sd.control.ControlServerMain ControlServer-1 $REGISTRY_HOST 1099"
 sleep 1
-open_terminal "ControlServer-2" "cd '$(pwd)' && java -cp fileserver-core/target/fileserver-core-1.0-SNAPSHOT.jar br.ifmg.sd.control.ControlServerMain ControlServer-2"
+open_terminal "ControlServer-2" "cd '$(pwd)' && java -cp fileserver-core/target/fileserver-core-1.0-SNAPSHOT.jar br.ifmg.sd.control.ControlServerMain ControlServer-2 $REGISTRY_HOST 1099"
 sleep 2
 
 # 3. Iniciar Gateway
