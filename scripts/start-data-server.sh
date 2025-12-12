@@ -10,7 +10,7 @@ SERVER_NAME=$1
 REGISTRY_HOST=${2:-localhost}
 REGISTRY_PORT=${3:-1099}
 
-JAR_PATH="../fileserver-data/target/"
+JAR_PATH="../fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar"
 
 echo "Iniciando $SERVER_NAME..."
 echo "Registry: $REGISTRY_HOST:$REGISTRY_PORT"

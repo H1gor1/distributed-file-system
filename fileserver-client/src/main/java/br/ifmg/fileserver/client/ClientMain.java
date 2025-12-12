@@ -15,10 +15,16 @@ import java.util.Scanner;
 
 public class ClientMain {
 
-    private static final String GATEWAY_URL = "http://localhost:8080";
+    private static final String GATEWAY_URL;
     private static final HttpClient httpClient = HttpClient.newHttpClient();
     private static final Gson gson = new Gson();
     private static String currentToken = null;
+
+    static {
+        String host = System.getProperty("gateway.host", "localhost");
+        String port = System.getProperty("gateway.port", "8080");
+        GATEWAY_URL = "http://" + host + ":" + port;
+    }
 
     public static void main(String[] args) {
         System.out.println("╔═══════════════════════════════════════════╗");
