@@ -39,7 +39,7 @@ public class ClusterClient {
         Address selectedServer = servers.get(random.nextInt(servers.size()));
         
         RequestOptions opts = new RequestOptions(
-            ResponseMode.GET_ALL,
+            ResponseMode.GET_FIRST,
             TIMEOUT_MS
         );
         
