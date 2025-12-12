@@ -5,6 +5,18 @@
 
 cd "$(dirname "$0")"
 
+# Configurações
+REGISTRY_HOST=${1:-localhost}
+GATEWAY_PORT=${2:-8080}
+
+echo "═══════════════════════════════════════════════════"
+echo "  Sistema de Arquivos Distribuído - Start All"
+echo "═══════════════════════════════════════════════════"
+echo "RMI Registry: $REGISTRY_HOST:1099"
+echo "Gateway: http://$REGISTRY_HOST:$GATEWAY_PORT"
+echo "═══════════════════════════════════════════════════"
+echo ""
+
 # Detectar terminal disponível
 TERMINAL=""
 if command -v gnome-terminal &> /dev/null; then
@@ -50,11 +62,11 @@ open_terminal() {
 
 # 1. Iniciar 3 Data Servers
 echo "📦 Iniciando Data Servers..."
-open_terminal "DataServer-1" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-1 localhost 1099"
+open_terminal "DataServer-1" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-1 $REGISTRY_HOST 1099"
 sleep 2
-open_terminal "DataServer-2" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-2 localhost 1099"
+open_terminal "DataServer-2" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-2 $REGISTRY_HOST 1099"
 sleep 1
-open_terminal "DataServer-3" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-3 localhost 1099"
+open_terminal "DataServer-3" "cd '$(pwd)' && java -cp fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar br.ifmg.sd.data.DataServerMain DataServer-3 $REGISTRY_HOST 1099"
 sleep 2
 
 # 2. Iniciar 2 Control Servers (fileserver-core)
@@ -66,12 +78,12 @@ sleep 2
 
 # 3. Iniciar Gateway
 echo "🌐 Iniciando Gateway..."
-open_terminal "Gateway" "cd '$(pwd)' && mvn -pl fileserver-gateway compile exec:java -Dexec.mainClass='br.ifmg.sd.gateway.core.HttpGateway'"
+open_terminal "Gateway" "cd '$(pwd)' && java -cp fileserver-gateway/target/fileserver-gateway-1.0-SNAPSHOT.jar br.ifmg.sd.gateway.core.HttpGateway $GATEWAY_PORT"
 sleep 3
 
 # 4. Iniciar Cliente
 echo "💻 Iniciando Cliente..."
-open_terminal "Client" "cd '$(pwd)' && mvn -pl fileserver-client compile exec:java -Dexec.mainClass='br.ifmg.fileserver.client.ClientMain'"
+open_terminal "Client" "cd '$(pwd)' && java -Dgateway.host=$REGISTRY_HOST -Dgateway.port=$GATEWAY_PORT -jar fileserver-client/target/fileserver-client-1.0-SNAPSHOT.jar"
 
 echo ""
 echo "✅ Todos os componentes foram iniciados!"
@@ -79,8 +91,12 @@ echo ""
 echo "📋 Componentes:"
 echo "  • 3x Data Servers (DataServer-1, DataServer-2, DataServer-3)"
 echo "  • 2x Control Servers (ControlServer-1, ControlServer-2)"
-echo "  • 1x Gateway"
+echo "  • 1x Gateway (http://$REGISTRY_HOST:$GATEWAY_PORT)"
 echo "  • 1x Client"
 echo ""
 echo "💡 Para encerrar todos os processos:"
-echo "   pkill -f 'DataServerMain|ControlServerMain|fileserver-gateway|fileserver-client'"
+echo "   pkill -f 'DataServerMain|ControlServerMain|HttpGateway|ClientMain'"
+echo ""
+echo "💡 Uso para rede distribuída:"
+echo "   ./start-all.sh <registry_ip> <gateway_port>"
+echo "   Exemplo: ./start-all.sh 192.168.1.100 8080"
