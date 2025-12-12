@@ -151,7 +151,7 @@ public class DataServer
 
             try {
                 System.out.println(
-                    "Tentando criar RMI Registry na porta " +
+                    "Tentando criar RMI Registry local na porta " +
                         registryPort +
                         "..."
                 );
@@ -160,17 +160,17 @@ public class DataServer
                     "RMI Registry criado na porta " + registryPort
                 );
             } catch (java.rmi.server.ExportException e) {
-                System.out.println("RMI Registry já existe, conectando...");
-                registry = LocateRegistry.getRegistry(
-                    registryHost,
-                    registryPort
-                );
-                System.out.println("✓ Conectado ao RMI Registry existente");
+                System.out.println("RMI Registry já existe na porta local, conectando...");
+                registry = LocateRegistry.getRegistry("localhost", registryPort);
+                System.out.println("✓ Conectado ao RMI Registry local existente");
             }
 
             registry.rebind("data-service", this);
             System.out.println(
                 "DataService registrado no RMI Registry como 'data-service'"
+            );
+            System.out.println(
+                "Hostname RMI configurado: " + System.getProperty("java.rmi.server.hostname")
             );
         } catch (Exception e) {
             System.err.println(

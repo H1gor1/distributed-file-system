@@ -15,4 +15,4 @@ JAR_PATH="../fileserver-data/target/fileserver-data-1.0-SNAPSHOT.jar"
 echo "Iniciando $SERVER_NAME..."
 echo "Registry: $REGISTRY_HOST:$REGISTRY_PORT"
 
-java -jar "$JAR_PATH" "$SERVER_NAME" "$REGISTRY_HOST" "$REGISTRY_PORT"
+java -Djava.rmi.server.hostname=$REGISTRY_HOST -jar "$JAR_PATH" "$SERVER_NAME" "$REGISTRY_HOST" "$REGISTRY_PORT"
