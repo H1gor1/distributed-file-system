@@ -34,7 +34,7 @@ public class UploadFileHandler extends BaseHandler {
         byte[] content = java.util.Base64.getDecoder().decode(contentBase64);
 
         MethodCall call = new MethodCall(
-            "saveFileToDataCluster",
+            "uploadFile",
             new Object[] { token, fileName, content },
             new Class<?>[] { String.class, String.class, byte[].class }
         );
