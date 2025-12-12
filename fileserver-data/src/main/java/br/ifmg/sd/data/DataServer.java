@@ -5,6 +5,7 @@ import br.ifmg.sd.data.repository.UserRepository;
 import br.ifmg.sd.models.File;
 import br.ifmg.sd.models.FileReplication;
 import br.ifmg.sd.models.ReplicationAck;
+import br.ifmg.sd.models.UserReplication;
 import br.ifmg.sd.rpc.DataService;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -485,13 +486,53 @@ public class DataServer
         System.out.println("RMI: Registrando usuário: " + email);
 
         try {
-            boolean success = userRepository.register(userId, name, password, email);
-            if (success) {
-                System.out.println("Usuário registrado: " + email);
-            } else {
+            long createdAt = System.currentTimeMillis();
+            boolean success = userRepository.registerWithTimestamp(userId, name, password, email, createdAt);
+            
+            if (!success) {
                 System.out.println("Email já está em uso: " + email);
+                return false;
             }
-            return success;
+            
+            System.out.println("Usuário registrado: " + email);
+
+            UserReplication replication = new UserReplication(
+                userId,
+                name,
+                password,
+                email,
+                createdAt
+            );
+
+            int clusterSize = channel.getView().size();
+            int expectedAcks = clusterSize - 1;
+            
+            if (expectedAcks > 0) {
+                replicationCoordinator.startOperation(
+                    replication.getOperationId(),
+                    expectedAcks
+                );
+            }
+
+            Message msg = new ObjectMessage(null, replication);
+            channel.send(msg);
+
+            if (expectedAcks > 0) {
+                boolean replicationSuccess = replicationCoordinator.waitForCompletion(
+                    replication.getOperationId(),
+                    10,
+                    TimeUnit.SECONDS
+                );
+
+                if (!replicationSuccess) {
+                    System.err.println(
+                        "Aviso: Nem todas as réplicas confirmaram o registro do usuário"
+                    );
+                }
+            }
+
+            System.out.println("Usuário registrado e replicado com sucesso");
+            return true;
         } catch (Exception e) {
             throw new RemoteException("Erro ao registrar usuário", e);
         }
@@ -530,6 +571,8 @@ public class DataServer
 
         if (obj instanceof FileReplication) {
             handleFileReplication(msg, (FileReplication) obj);
+        } else if (obj instanceof UserReplication) {
+            handleUserReplication(msg, (UserReplication) obj);
         } else if (obj instanceof ReplicationAck) {
             handleReplicationAck((ReplicationAck) obj);
         }
@@ -609,11 +652,71 @@ public class DataServer
         );
     }
 
+    private void handleUserReplication(Message msg, UserReplication replication) {
+        if (msg.getSrc().equals(channel.getAddress())) {
+            System.out.println("Ignorando mensagem própria: " + replication.getOperationId());
+            return;
+        }
+
+        boolean success = false;
+        String errorMessage = null;
+
+        try {
+            System.out.println("Recebendo replicação de usuário: " + replication);
+
+            userRepository.registerWithTimestamp(
+                replication.getUserId(),
+                replication.getName(),
+                replication.getPassword(),
+                replication.getEmail(),
+                replication.getCreatedAt()
+            );
+            
+            success = true;
+        } catch (Exception e) {
+            errorMessage = e.getClass().getSimpleName() + ": " + 
+                          (e.getMessage() != null ? e.getMessage() : "Unknown error");
+            System.err.println(
+                "Erro ao processar replicação de usuário: " + errorMessage
+            );
+            e.printStackTrace();
+        }
+
+        try {
+            ReplicationAck ack = new ReplicationAck(
+                replication.getOperationId(),
+                serverName,
+                success,
+                errorMessage != null ? errorMessage : ""
+            );
+
+            Message ackMsg = new ObjectMessage(msg.getSrc(), ack);
+            channel.send(ackMsg);
+            System.out.println("ACK enviado: " + ack);
+        } catch (Exception e) {
+            System.err.println("Erro ao enviar ACK: " + e.getMessage());
+        }
+    }
+
     @Override
     public void getState(OutputStream output) throws Exception {
         System.out.println("Solicitacao de estado recebida");
         DataOutputStream dataOutput = new DataOutputStream(output);
 
+        // Enviar usuários primeiro
+        List<br.ifmg.sd.models.User> users = userRepository.findAll();
+        dataOutput.writeInt(users.size());
+        System.out.println("Enviando " + users.size() + " usuários...");
+
+        for (br.ifmg.sd.models.User user : users) {
+            dataOutput.writeUTF(user.getId());
+            dataOutput.writeUTF(user.getName());
+            dataOutput.writeUTF(user.getPassword());
+            dataOutput.writeUTF(user.getEmail());
+            System.out.println("  Enviando usuário: " + user.getEmail());
+        }
+
+        // Enviar arquivos
         int fileCount = fileRepository.size();
         dataOutput.writeInt(fileCount);
         System.out.println("Enviando " + fileCount + " registros do banco...");
@@ -657,7 +760,7 @@ public class DataServer
 
         dataOutput.flush();
         System.out.println(
-            "Estado completo enviado: " + fileCount + " arquivos"
+            "Estado completo enviado: " + users.size() + " usuários, " + fileCount + " arquivos"
         );
     }
 
@@ -666,6 +769,44 @@ public class DataServer
         System.out.println("Recebendo estado...");
         DataInputStream dataInput = new DataInputStream(input);
 
+        // Receber usuários primeiro
+        int userCount = dataInput.readInt();
+        System.out.println("Recebendo " + userCount + " usuários...");
+
+        int userSuccessCount = 0;
+        int userErrorCount = 0;
+
+        for (int i = 0; i < userCount; i++) {
+            try {
+                String userId = dataInput.readUTF();
+                String name = dataInput.readUTF();
+                String password = dataInput.readUTF();
+                String email = dataInput.readUTF();
+
+                userRepository.save(new br.ifmg.sd.models.User(userId, email, name, password));
+                userSuccessCount++;
+                System.out.println(
+                    "  [" +
+                        (i + 1) +
+                        "/" +
+                        userCount +
+                        "] Usuário replicado: " +
+                        email
+                );
+            } catch (Exception e) {
+                userErrorCount++;
+                System.err.println(
+                    "  Erro ao receber usuário [" +
+                        (i + 1) +
+                        "/" +
+                        userCount +
+                        "]: " +
+                        e.getMessage()
+                );
+            }
+        }
+
+        // Receber arquivos
         int fileCount = dataInput.readInt();
         System.out.println("Recebendo " + fileCount + " arquivos...");
 
@@ -735,7 +876,11 @@ public class DataServer
         }
 
         System.out.println(
-            "Estado recebido! Sucesso: " +
+            "Estado recebido! Usuários - Sucesso: " +
+                userSuccessCount +
+                ", Erros: " +
+                userErrorCount +
+                " | Arquivos - Sucesso: " +
                 successCount +
                 ", Erros: " +
                 errorCount

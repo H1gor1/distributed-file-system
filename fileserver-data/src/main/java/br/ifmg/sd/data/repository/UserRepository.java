@@ -15,6 +15,11 @@ public class UserRepository {
 
     public boolean register(String userId, String name, String password, String email)
         throws SQLException {
+        return registerWithTimestamp(userId, name, password, email, System.currentTimeMillis());
+    }
+
+    public boolean registerWithTimestamp(String userId, String name, String password, String email, long createdAt)
+        throws SQLException {
         String sql = """
                 INSERT INTO users (id, name, password, email, created_at)
                 VALUES (?, ?, ?, ?, ?)
@@ -25,7 +30,7 @@ public class UserRepository {
             pstmt.setString(2, name);
             pstmt.setString(3, password);
             pstmt.setString(4, email);
-            pstmt.setLong(5, System.currentTimeMillis());
+            pstmt.setLong(5, createdAt);
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
